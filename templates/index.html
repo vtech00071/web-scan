@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Security Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+
+      body {
+        font-family: "Inter", sans-serif;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      /* Custom scrollbar for a darker theme */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1f2937; /* A dark gray */
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4b5563; /* A medium gray */
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280; /* Lighter on hover */
+      }
+    </style>
+  </head>
+
+  <body
+    class="min-h-screen flex items-center justify-center p-4 bg-slate-900 text-slate-100"
+  >
+    <div
+      class="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-700"
+    >
+      <h1 class="text-4xl font-bold text-slate-100 text-center mb-4">
+        Web Security Scanner 🛡️
+      </h1>
+      <p class="text-center text-slate-400 mb-8 max-w-lg mx-auto">
+        Perform a comprehensive security scan on any website to identify
+        potential vulnerabilities and risks.
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-4 mb-8">
+        <input
+          type="text"
+          id="urlInput"
+          placeholder="https://example.com"
+          class="flex-1 p-4 rounded-xl border border-slate-700 bg-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200 placeholder:text-slate-500"
+          autocomplete="off"
+        />
+        <button
+          id="scanButton"
+          class="bg-teal-600 text-white p-4 rounded-xl font-semibold hover:bg-teal-500 transition-colors duration-200 shadow-lg"
+        >
+          Scan Website
+        </button>
+      </div>
+
+      <div
+        id="loading"
+        class="hidden flex justify-center items-center mb-4 text-slate-400"
+      >
+        <div
+          class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-teal-500"
+        ></div>
+        <span class="ml-3 font-medium">Scanning...</span>
+      </div>
+
+      <div id="resultsContainer" class="space-y-6"></div>
+    </div>
+
+    <script>
+      document
+        .getElementById("scanButton")
+        .addEventListener("click", async () => {
+          const urlInput = document.getElementById("urlInput");
+          const url = urlInput.value.trim();
+          const resultsContainer = document.getElementById("resultsContainer");
+          const loadingIndicator = document.getElementById("loading");
+          const scanButton = document.getElementById("scanButton");
+
+          // Clear previous results and show loading
+          resultsContainer.innerHTML = "";
+          loadingIndicator.classList.remove("hidden");
+          scanButton.disabled = true;
+
+          if (!url) {
+            displayError("Please enter a valid URL.");
+            loadingIndicator.classList.add("hidden");
+            scanButton.disabled = false;
+            return;
+          }
+
+          try {
+            // Make a POST request to the Flask backend
+            const response = await fetch("/scan", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ url: url }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(
+                errorData.error || "Something went wrong on the server."
+              );
+            }
+
+            const data = await response.json();
+
+            // Display the results
+            if (data.results && data.results.length > 0) {
+              data.results.forEach((result) => {
+                createResultCard(result);
+              });
+            } else {
+              displayError("No scan results were returned.");
+            }
+          } catch (error) {
+            displayError(`Scan failed: ${error.message}`);
+            console.error("Scan Error:", error);
+          } finally {
+            // Hide loading and re-enable button
+            loadingIndicator.classList.add("hidden");
+            scanButton.disabled = false;
+          }
+        });
+
+      function createResultCard(result) {
+        const resultsContainer = document.getElementById("resultsContainer");
+        const statusColors = {
+          passed: { bg: "bg-green-700", text: "text-green-300" },
+          safe: { bg: "bg-green-700", text: "text-green-300" },
+          warning: { bg: "bg-yellow-700", text: "text-yellow-300" },
+          danger: { bg: "bg-red-700", text: "text-red-300" },
+          info: { bg: "bg-blue-700", text: "text-blue-300" },
+          failed: { bg: "bg-red-700", text: "text-red-300" },
+        };
+
+        const statusClass = statusColors[result.status] || statusColors["info"];
+
+        const card = document.createElement("div");
+        card.className = `p-5 rounded-2xl border border-slate-700 transition-all duration-300 transform hover:scale-[1.01] hover:shadow-lg ${statusClass.bg}/20`;
+
+        card.innerHTML = `
+                <div class="flex items-center space-x-2 mb-2">
+                    <span class="font-bold text-slate-200">${result.check}</span>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass.bg} ${statusClass.text} capitalize bg-opacity-30">${result.status}</span>
+                </div>
+                <p class="text-sm text-slate-400">${result.details}</p>
+            `;
+        resultsContainer.appendChild(card);
+      }
+
+      function displayError(message) {
+        const resultsContainer = document.getElementById("resultsContainer");
+        resultsContainer.innerHTML = `
+                <div class="bg-red-700/20 text-red-300 p-5 rounded-2xl border border-slate-700">
+                    <p class="font-semibold text-lg mb-1">Error:</p>
+                    <p class="text-sm">${message}</p>
+                </div>
+            `;
+      }
+    </script>
+  </body>
+</html>
